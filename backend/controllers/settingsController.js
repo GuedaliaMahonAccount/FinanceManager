@@ -3,7 +3,7 @@ import Settings from '../models/Settings.js';
 // Get setting by key
 export const getSetting = async (req, res) => {
     try {
-        const setting = await Settings.findOne({ key: req.params.key });
+        const setting = await Settings.findOne({ key: req.params.key, user: req.user.id });
         if (!setting) {
             return res.status(404).json({ message: 'ההגדרה לא נמצאה' });
         }
@@ -16,7 +16,7 @@ export const getSetting = async (req, res) => {
 // Get all settings
 export const getAllSettings = async (req, res) => {
     try {
-        const settings = await Settings.find();
+        const settings = await Settings.find({ user: req.user.id });
         const settingsObj = {};
         settings.forEach(s => {
             settingsObj[s.key] = s.value;
@@ -34,8 +34,8 @@ export const updateSetting = async (req, res) => {
         const { value } = req.body;
 
         const setting = await Settings.findOneAndUpdate(
-            { key },
-            { key, value },
+            { key, user: req.user.id },
+            { key, value, user: req.user.id },
             { new: true, upsert: true }
         );
 
@@ -48,11 +48,11 @@ export const updateSetting = async (req, res) => {
 // Initialize default settings
 export const initializeDefaultSettings = async (req, res) => {
     try {
-        const count = await Settings.countDocuments();
+        const count = await Settings.countDocuments({ user: req.user.id });
 
         if (count === 0) {
-            await Settings.create({ key: 'displayCurrency', value: 'ILS' });
-            const settings = await Settings.find();
+            await Settings.create({ key: 'displayCurrency', value: 'ILS', user: req.user.id });
+            const settings = await Settings.find({ user: req.user.id });
             res.json({ message: 'הגדרות ברירת מחדל נוצרו', settings });
         } else {
             res.json({ message: 'הגדרות כבר קיימות' });

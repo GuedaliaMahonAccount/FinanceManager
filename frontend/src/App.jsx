@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Routes, Route, useNavigate, useLocation, useParams, NavLink } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, useParams, NavLink, Navigate } from 'react-router-dom';
 import { initDB } from './db/database';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Dashboard from './components/Dashboard';
 import Project from './components/Project';
 import Settings from './components/Settings';
 import ProjectModal from './components/ProjectModal';
+import Login from './pages/Auth/Login';
+import Signup from './pages/Auth/Signup';
 
 import './styles/variables.css';
 import './styles/main.css';
@@ -16,9 +19,26 @@ const ProjectWrapper = ({ onNavigate }) => {
   return <Project projectId={id} onNavigate={onNavigate} />;
 };
 
-function App() {
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="loading">
+        <div className="spinner" />
+        <div style={{ marginTop: 'var(--spacing-md)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+          טוען...
+        </div>
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+};
+
+function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [dbReady, setDbReady] = useState(false);
@@ -36,7 +56,7 @@ function App() {
     try {
       setBootLoading(true);
       setBootError('');
-      await initDB();
+      // await initDB(); // Using backend now
       setDbReady(true);
     } catch (error) {
       console.error('Error initializing database:', error);
@@ -75,9 +95,6 @@ function App() {
         <div className="spinner" />
         <div style={{ marginTop: 'var(--spacing-md)', color: 'var(--text-secondary)', fontWeight: 600 }}>
           טוען...
-        </div>
-        <div style={{ marginTop: 'var(--spacing-sm)', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
-          מאתחל את מסד הנתונים
         </div>
       </div>
     );
@@ -129,22 +146,37 @@ function App() {
               <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>{headerTitle}</div>
             </div>
 
-            <nav className="nav" aria-label="Main navigation">
-              <NavLink
-                to="/"
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                end
-              >
-                לוח בקרה
-              </NavLink>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <nav className="nav" aria-label="Main navigation">
+                <NavLink
+                  to="/"
+                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                  end
+                >
+                  לוח בקרה
+                </NavLink>
 
-              <NavLink
-                to="/settings"
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                <NavLink
+                  to="/settings"
+                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                  הגדרות
+                </NavLink>
+              </nav>
+              <button
+                onClick={logout}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--error-color)',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  padding: '0.5rem'
+                }}
               >
-                הגדרות
-              </NavLink>
-            </nav>
+                התנתק
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -189,6 +221,22 @@ function App() {
         />
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/*" element={
+          <ProtectedRoute>
+            <MainLayout />
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </AuthProvider>
   );
 }
 

@@ -1,9 +1,10 @@
 import Transaction from '../models/Transaction.js';
+import mongoose from 'mongoose';
 
 // Get all transactions
 export const getAllTransactions = async (req, res) => {
     try {
-        const transactions = await Transaction.find()
+        const transactions = await Transaction.find({ user: req.user.id })
             .populate('labelId')
             .sort({ date: -1 });
         res.json(transactions);
@@ -13,9 +14,10 @@ export const getAllTransactions = async (req, res) => {
 };
 
 // Get transactions by project
+// Get transactions by project
 export const getTransactionsByProject = async (req, res) => {
     try {
-        const transactions = await Transaction.find({ projectId: req.params.projectId })
+        const transactions = await Transaction.find({ projectId: req.params.projectId, user: req.user.id })
             .populate('labelId')
             .sort({ date: -1 });
         res.json(transactions);
@@ -27,7 +29,7 @@ export const getTransactionsByProject = async (req, res) => {
 // Get single transaction
 export const getTransaction = async (req, res) => {
     try {
-        const transaction = await Transaction.findById(req.params.id).populate('labelId');
+        const transaction = await Transaction.findOne({ _id: req.params.id, user: req.user.id }).populate('labelId');
         if (!transaction) {
             return res.status(404).json({ message: 'התנועה לא נמצאה' });
         }
@@ -68,7 +70,8 @@ export const createTransaction = async (req, res) => {
             currency: currency || 'ILS',
             date: new Date(date), // Convert timestamp to Date object
             labelId,
-            receipts: receipts || []
+            receipts: receipts || [],
+            user: req.user.id
         });
 
         const savedTransaction = await transaction.save();
@@ -84,8 +87,8 @@ export const createTransaction = async (req, res) => {
 // Update transaction
 export const updateTransaction = async (req, res) => {
     try {
-        const transaction = await Transaction.findByIdAndUpdate(
-            req.params.id,
+        const transaction = await Transaction.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
             req.body,
             { new: true, runValidators: true }
         ).populate('labelId');
@@ -103,7 +106,7 @@ export const updateTransaction = async (req, res) => {
 // Delete transaction
 export const deleteTransaction = async (req, res) => {
     try {
-        const transaction = await Transaction.findByIdAndDelete(req.params.id);
+        const transaction = await Transaction.findOneAndDelete({ _id: req.params.id, user: req.user.id });
 
         if (!transaction) {
             return res.status(404).json({ message: 'התנועה לא נמצאה' });
@@ -121,7 +124,7 @@ export const getProjectStats = async (req, res) => {
         const { projectId } = req.params;
 
         const stats = await Transaction.aggregate([
-            { $match: { projectId: mongoose.Types.ObjectId(projectId) } },
+            { $match: { projectId: new mongoose.Types.ObjectId(projectId), user: new mongoose.Types.ObjectId(req.user.id) } },
             {
                 $group: {
                     _id: '$type',

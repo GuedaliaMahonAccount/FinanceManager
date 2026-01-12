@@ -3,7 +3,7 @@ import Subscription from '../models/Subscription.js';
 // Get subscriptions by project
 export const getSubscriptionsByProject = async (req, res) => {
     try {
-        const subscriptions = await Subscription.find({ projectId: req.params.projectId }).sort({ startDate: 1 });
+        const subscriptions = await Subscription.find({ projectId: req.params.projectId, user: req.user.id }).sort({ startDate: 1 });
         res.json(subscriptions);
     } catch (error) {
         res.status(500).json({ message: 'שגיאה בטעינת המנויים', error: error.message });
@@ -27,7 +27,8 @@ export const createSubscription = async (req, res) => {
             currency,
             startDate: new Date(startDate),
             frequencyValue: Number(frequencyValue),
-            frequencyUnit
+            frequencyUnit,
+            user: req.user.id
         });
 
         const savedSubscription = await subscription.save();
@@ -40,8 +41,8 @@ export const createSubscription = async (req, res) => {
 // Update subscription
 export const updateSubscription = async (req, res) => {
     try {
-        const subscription = await Subscription.findByIdAndUpdate(
-            req.params.id,
+        const subscription = await Subscription.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
             req.body,
             { new: true, runValidators: true }
         );
@@ -59,7 +60,7 @@ export const updateSubscription = async (req, res) => {
 // Delete subscription
 export const deleteSubscription = async (req, res) => {
     try {
-        const subscription = await Subscription.findByIdAndDelete(req.params.id);
+        const subscription = await Subscription.findOneAndDelete({ _id: req.params.id, user: req.user.id });
 
         if (!subscription) {
             return res.status(404).json({ message: 'המנוי לא נמצא' });

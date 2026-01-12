@@ -8,8 +8,11 @@ import {
     deleteTransaction,
     getProjectStats
 } from '../controllers/transactionController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+router.use(protect);
 
 router.get('/', getAllTransactions);
 router.get('/project/:projectId', getTransactionsByProject);

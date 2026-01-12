@@ -3,7 +3,7 @@ import Label from '../models/Label.js';
 // Get all labels
 export const getAllLabels = async (req, res) => {
     try {
-        const labels = await Label.find().sort({ createdAt: -1 });
+        const labels = await Label.find({ user: req.user.id }).sort({ createdAt: -1 });
         res.json(labels);
     } catch (error) {
         res.status(500).json({ message: 'שגיאה בטעינת התוויות', error: error.message });
@@ -13,7 +13,7 @@ export const getAllLabels = async (req, res) => {
 // Get single label
 export const getLabel = async (req, res) => {
     try {
-        const label = await Label.findById(req.params.id);
+        const label = await Label.findOne({ _id: req.params.id, user: req.user.id });
         if (!label) {
             return res.status(404).json({ message: 'התווית לא נמצאה' });
         }
@@ -34,7 +34,8 @@ export const createLabel = async (req, res) => {
 
         const label = new Label({
             name,
-            color: color || '#6366f1'
+            color: color || '#6366f1',
+            user: req.user.id
         });
 
         const savedLabel = await label.save();
@@ -49,8 +50,8 @@ export const updateLabel = async (req, res) => {
     try {
         const { name, color } = req.body;
 
-        const label = await Label.findByIdAndUpdate(
-            req.params.id,
+        const label = await Label.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
             { name, color },
             { new: true, runValidators: true }
         );
@@ -68,7 +69,7 @@ export const updateLabel = async (req, res) => {
 // Delete label
 export const deleteLabel = async (req, res) => {
     try {
-        const label = await Label.findByIdAndDelete(req.params.id);
+        const label = await Label.findOneAndDelete({ _id: req.params.id, user: req.user.id });
 
         if (!label) {
             return res.status(404).json({ message: 'התווית לא נמצאה' });
@@ -81,21 +82,22 @@ export const deleteLabel = async (req, res) => {
 };
 
 // Initialize default labels
+// Initialize default labels
 export const initializeDefaultLabels = async (req, res) => {
     try {
-        const count = await Label.countDocuments();
+        const count = await Label.countDocuments({ user: req.user.id });
 
         if (count === 0) {
             const defaultLabels = [
-                { name: 'אוכל', color: '#f59e0b' },
-                { name: 'תחבורה', color: '#3b82f6' },
-                { name: 'קניות', color: '#8b5cf6' },
-                { name: 'משכורת', color: '#10b981' },
-                { name: 'אחר', color: '#6b7280' }
+                { name: 'אוכל', color: '#f59e0b', user: req.user.id },
+                { name: 'תחבורה', color: '#3b82f6', user: req.user.id },
+                { name: 'קניות', color: '#8b5cf6', user: req.user.id },
+                { name: 'משכורת', color: '#10b981', user: req.user.id },
+                { name: 'אחר', color: '#6b7280', user: req.user.id }
             ];
 
             await Label.insertMany(defaultLabels);
-            const labels = await Label.find();
+            const labels = await Label.find({ user: req.user.id });
             res.json({ message: 'תוויות ברירת מחדל נוצרו', labels });
         } else {
             res.json({ message: 'תוויות כבר קיימות' });

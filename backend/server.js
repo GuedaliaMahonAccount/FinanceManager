@@ -9,6 +9,7 @@ import transactionRoutes from './routes/transactions.js';
 import labelRoutes from './routes/labels.js';
 import settingsRoutes from './routes/settings.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.get("/api/health", (req, res) => {
   res.json({ ok: true, message: "Backend is running" });
 });
 
+app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/labels', labelRoutes);

@@ -3,7 +3,7 @@ import Project from '../models/Project.js';
 // Get all projects
 export const getAllProjects = async (req, res) => {
     try {
-        const projects = await Project.find().sort({ createdAt: -1 });
+        const projects = await Project.find({ user: req.user.id }).sort({ createdAt: -1 });
         res.json(projects);
     } catch (error) {
         res.status(500).json({ message: 'שגיאה בטעינת הפרויקטים', error: error.message });
@@ -13,7 +13,7 @@ export const getAllProjects = async (req, res) => {
 // Get single project
 export const getProject = async (req, res) => {
     try {
-        const project = await Project.findById(req.params.id);
+        const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
         if (!project) {
             return res.status(404).json({ message: 'הפרויקט לא נמצא' });
         }
@@ -34,7 +34,8 @@ export const createProject = async (req, res) => {
 
         const project = new Project({
             name,
-            description
+            description,
+            user: req.user.id
         });
 
         const savedProject = await project.save();
@@ -49,8 +50,8 @@ export const updateProject = async (req, res) => {
     try {
         const { name, description } = req.body;
 
-        const project = await Project.findByIdAndUpdate(
-            req.params.id,
+        const project = await Project.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
             { name, description },
             { new: true, runValidators: true }
         );
@@ -68,7 +69,7 @@ export const updateProject = async (req, res) => {
 // Delete project
 export const deleteProject = async (req, res) => {
     try {
-        const project = await Project.findByIdAndDelete(req.params.id);
+        const project = await Project.findOneAndDelete({ _id: req.params.id, user: req.user.id });
 
         if (!project) {
             return res.status(404).json({ message: 'הפרויקט לא נמצא' });

@@ -7,8 +7,11 @@ import {
     deleteLabel,
     initializeDefaultLabels
 } from '../controllers/labelController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+router.use(protect);
 
 router.get('/', getAllLabels);
 router.get('/:id', getLabel);
