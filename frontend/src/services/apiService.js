@@ -111,3 +111,22 @@ export const settingsAPI = {
         method: 'POST'
     })
 };
+
+// Subscriptions API
+export const subscriptionsAPI = {
+    getByProject: (projectId) => apiCall(`/subscriptions/project/${projectId}`),
+
+    create: (subscription) => apiCall('/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify(subscription)
+    }),
+
+    update: (id, subscription) => apiCall(`/subscriptions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(subscription)
+    }),
+
+    delete: (id) => apiCall(`/subscriptions/${id}`, {
+        method: 'DELETE'
+    })
+};

@@ -8,6 +8,7 @@ import projectRoutes from './routes/projects.js';
 import transactionRoutes from './routes/transactions.js';
 import labelRoutes from './routes/labels.js';
 import settingsRoutes from './routes/settings.js';
+import subscriptionRoutes from './routes/subscriptionRoutes.js';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/labels', labelRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 // 4. Error handling middleware
 app.use((err, req, res, next) => {

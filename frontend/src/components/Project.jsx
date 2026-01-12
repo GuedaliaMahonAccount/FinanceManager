@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { projectsAPI, transactionsAPI, labelsAPI, settingsAPI } from '../services/apiService';
+import { projectsAPI, transactionsAPI, labelsAPI, settingsAPI, subscriptionsAPI } from '../services/apiService';
 import { convertCurrency, formatCurrency } from '../services/currencyService';
 import { downloadFile, getFileIcon } from '../services/storageService';
 import TransactionModal from './TransactionModal';
+import SubscriptionModal from './SubscriptionModal';
 
 const Project = ({ projectId, onNavigate }) => {
     const [project, setProject] = useState(null);
     const [transactions, setTransactions] = useState([]);
+    const [subscriptions, setSubscriptions] = useState([]);
     const [filteredTransactions, setFilteredTransactions] = useState([]);
+    const [notifications, setNotifications] = useState([]);
     const [stats, setStats] = useState({ income: 0, expenses: 0, total: 0 });
     const [displayCurrency, setDisplayCurrency] = useState('ILS');
     const [labels, setLabels] = useState([]);
@@ -22,6 +25,8 @@ const Project = ({ projectId, onNavigate }) => {
     // Modal
     const [showTransactionModal, setShowTransactionModal] = useState(false);
     const [editingTransaction, setEditingTransaction] = useState(null);
+    const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+    const [editingSubscription, setEditingSubscription] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -32,24 +37,27 @@ const Project = ({ projectId, onNavigate }) => {
     }, [transactions, searchTerm, selectedYear, selectedLabel, selectedType]);
 
     useEffect(() => {
-        if (filteredTransactions.length > 0 || transactions.length > 0) {
+        if (filteredTransactions.length > 0 || transactions.length > 0 || subscriptions.length > 0) {
             calculateStats();
+            checkNotifications();
         }
-    }, [filteredTransactions, displayCurrency]);
+    }, [filteredTransactions, displayCurrency, subscriptions, transactions]);
 
     const loadData = async () => {
         try {
             setLoading(true);
-            const [projectData, transactionsData, labelsData, settingsData] = await Promise.all([
+            const [projectData, transactionsData, labelsData, settingsData, subscriptionsData] = await Promise.all([
                 projectsAPI.getById(projectId),
                 transactionsAPI.getByProject(projectId),
                 labelsAPI.getAll(),
-                settingsAPI.getAll()
+                settingsAPI.getAll(),
+                subscriptionsAPI.getByProject(projectId)
             ]);
 
             setProject(projectData);
             const sortedTransactions = transactionsData.sort((a, b) => new Date(b.date) - new Date(a.date));
             setTransactions(sortedTransactions);
+            setSubscriptions(subscriptionsData || []);
             setLabels(labelsData);
             setDisplayCurrency(settingsData.displayCurrency || 'ILS');
         } catch (error) {
@@ -65,6 +73,7 @@ const Project = ({ projectId, onNavigate }) => {
 
         const transactionsToCalculate = filteredTransactions.length > 0 ? filteredTransactions : transactions;
 
+        // Calculate from transactions
         for (const transaction of transactionsToCalculate) {
             const convertedAmount = await convertCurrency(
                 transaction.amount,
@@ -86,6 +95,80 @@ const Project = ({ projectId, onNavigate }) => {
             total: income - expenses
         });
     };
+
+    const checkNotifications = () => {
+        const newNotifications = [];
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+
+        subscriptions.forEach(sub => {
+            const startDate = new Date(sub.startDate);
+            let checkDate = new Date(startDate);
+
+            // Only check active subscriptions that started in the past
+            if (checkDate > now) return;
+
+            // Iterate through expected payment dates
+            while (checkDate <= now) {
+                const checkYear = checkDate.getFullYear();
+                const checkMonth = checkDate.getMonth();
+
+                // We only care about "recent" missing payments (e.g., this year) to avoid spam
+                if (checkYear === currentYear) {
+                    // Check if there is a transaction for this subscription around this date
+                    const hasPayment = transactions.some(t => {
+                        if (t.subscriptionId === (sub._id || sub.id)) {
+                            const tDate = new Date(t.date);
+                            // Match if same month and year (for monthly) or same year (for yearly)
+                            if (sub.frequencyUnit === 'months') {
+                                return tDate.getMonth() === checkMonth && tDate.getFullYear() === checkYear;
+                            } else if (sub.frequencyUnit === 'years') {
+                                return tDate.getFullYear() === checkYear;
+                            }
+                            // For days/weeks, tighter check logic might be needed, but simple overlap is okay for now
+                            return Math.abs(tDate - checkDate) < 7 * 24 * 60 * 60 * 1000; // Within a week
+                        }
+                        return false;
+                    });
+
+                    if (!hasPayment) {
+                        newNotifications.push({
+                            subscription: sub,
+                            dueDate: new Date(checkDate),
+                            id: `${sub._id}-${checkDate.getTime()}`
+                        });
+                    }
+                }
+
+                // Increment checkDate
+                if (sub.frequencyUnit === 'days') checkDate.setDate(checkDate.getDate() + sub.frequencyValue);
+                else if (sub.frequencyUnit === 'weeks') checkDate.setDate(checkDate.getDate() + (sub.frequencyValue * 7));
+                else if (sub.frequencyUnit === 'months') checkDate.setMonth(checkDate.getMonth() + sub.frequencyValue);
+                else if (sub.frequencyUnit === 'years') checkDate.setFullYear(checkDate.getFullYear() + sub.frequencyValue);
+            }
+        });
+
+        // Sort notifications by date (newest first) and limit to avoid clutter
+        setNotifications(newNotifications.sort((a, b) => b.dueDate - a.dueDate));
+    };
+
+    const handlePayNotification = (notification) => {
+        const { subscription, dueDate } = notification;
+
+        setEditingTransaction({
+            projectId,
+            name: subscription.name,
+            description: `תשלום עבור לתקופת ${dueDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })}`,
+            amount: subscription.amount,
+            currency: subscription.currency,
+            date: dueDate.toISOString().split('T')[0],
+            type: 'expense',
+            subscriptionId: subscription._id || subscription.id
+        });
+        setShowTransactionModal(true);
+    };
+
 
     const filterTransactions = () => {
         let filtered = [...transactions];
@@ -168,6 +251,44 @@ const Project = ({ projectId, onNavigate }) => {
         setSelectedType('all');
     };
 
+    const handleSaveSubscription = async (subscriptionData) => {
+        try {
+            if (editingSubscription) {
+                await subscriptionsAPI.update(editingSubscription._id || editingSubscription.id, subscriptionData);
+            } else {
+                await subscriptionsAPI.create(subscriptionData);
+            }
+            setShowSubscriptionModal(false);
+            setEditingSubscription(null);
+            loadData();
+        } catch (error) {
+            console.error('Error saving subscription:', error);
+            alert('שגיאה בשמירת המנוי: ' + error.message);
+        }
+    };
+
+    const handleDeleteSubscription = async (subscriptionId) => {
+        if (!confirm('האם אתה בטוח שברצונך למחוק מנוי זה?')) return;
+
+        try {
+            await subscriptionsAPI.delete(subscriptionId);
+            loadData();
+        } catch (error) {
+            console.error('Error deleting subscription:', error);
+            alert('שגיאה במחיקת המנוי: ' + error.message);
+        }
+    };
+
+    const handleEditSubscription = (subscription) => {
+        setEditingSubscription(subscription);
+        setShowSubscriptionModal(true);
+    };
+
+    const handleSubscriptionModalClose = () => {
+        setShowSubscriptionModal(false);
+        setEditingSubscription(null);
+    };
+
     const years = [...new Set(transactions.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a);
     const hasActiveFilters = searchTerm || selectedYear !== 'all' || selectedLabel !== 'all' || selectedType !== 'all';
 
@@ -211,6 +332,17 @@ const Project = ({ projectId, onNavigate }) => {
                         </p>
                     )}
                 </div>
+                <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                        setEditingSubscription(null);
+                        setShowSubscriptionModal(true);
+                    }}
+                    style={{ marginLeft: 'var(--spacing-sm)' }}
+                >
+                    <span>🔄</span>
+                    מנוי חדש
+                </button>
                 <button
                     className="btn btn-primary"
                     onClick={() => {
@@ -341,6 +473,59 @@ const Project = ({ projectId, onNavigate }) => {
                     </span>
                 </div>
 
+                {/* Notifications Section */}
+                {notifications.length > 0 && (
+                    <div style={{ marginBottom: '20px', background: '#fff3cd', border: '1px solid #ffeeba', padding: '15px', borderRadius: '8px' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ תשלומים ממתינים</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {notifications.map(notif => (
+                                <div key={notif.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '8px 12px', borderRadius: '4px' }}>
+                                    <div>
+                                        <strong>{notif.subscription.name}</strong> - {notif.dueDate.toLocaleDateString('he-IL')}
+                                    </div>
+                                    <button
+                                        className="btn btn-sm btn-primary"
+                                        onClick={() => handlePayNotification(notif)}
+                                    >
+                                        שילמתי / הוסף חשבונית
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Subscriptions List (Pinned) */}
+                {subscriptions.length > 0 && (
+                    <div className="subscriptions-section" style={{ marginBottom: '20px', borderBottom: '2px dashed var(--border-color)', paddingBottom: '20px' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-primary)' }}>🔄 מנויים ותשלומים קבועים</h4>
+                        {subscriptions.map(sub => (
+                            <div key={sub._id || sub.id} className="transaction-item subscription-item" style={{ background: 'var(--bg-subtle)' }}>
+                                <div className="transaction-info">
+                                    <div className="transaction-name">{sub.name} <span style={{ fontSize: '0.8em', color: 'var(--text-muted)' }}>(פעיל)</span></div>
+                                    <div className="transaction-meta">
+                                        <span>החל מ: {new Date(sub.startDate).toLocaleDateString('he-IL')}</span>
+                                        <span> • כל {sub.frequencyValue} {
+                                            sub.frequencyUnit === 'days' ? 'ימים' :
+                                                sub.frequencyUnit === 'weeks' ? 'שבועות' :
+                                                    sub.frequencyUnit === 'months' ? 'חודשים' : 'שנים'
+                                        }</span>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+                                    <div className="transaction-amount expense">
+                                        -{formatCurrency(sub.amount, sub.currency)}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-xs)' }}>
+                                        <button className="btn-icon" onClick={() => handleEditSubscription(sub)}>✏️</button>
+                                        <button className="btn-icon" onClick={() => handleDeleteSubscription(sub._id || sub.id)} style={{ color: 'var(--color-danger)' }}>🗑️</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {filteredTransactions.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-state-icon">
@@ -390,6 +575,16 @@ const Project = ({ projectId, onNavigate }) => {
                     initialData={editingTransaction}
                     onClose={handleModalClose}
                     onSubmit={handleSaveTransaction}
+                />
+            )}
+
+            {/* Subscription Modal */}
+            {showSubscriptionModal && (
+                <SubscriptionModal
+                    initialData={editingSubscription}
+                    projectId={projectId}
+                    onClose={handleSubscriptionModalClose}
+                    onSuccess={handleSaveSubscription}
                 />
             )}
         </div>

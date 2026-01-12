@@ -134,6 +134,7 @@ const ProjectModal = ({ onClose, onSuccess }) => {
                 <span className="field-hint__counter">{(formData.description || '').length}/220</span>
               </div>
             </div>
+
           </div>
 
           <div className="modal-footer modal-footer--spread">
@@ -156,8 +157,8 @@ const ProjectModal = ({ onClose, onSuccess }) => {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };
 

@@ -40,6 +40,10 @@ const transactionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Label'
     },
+    subscriptionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Subscription'
+    },
     receipts: [{
         name: { type: String, required: true },
         type: { type: String, required: true },
