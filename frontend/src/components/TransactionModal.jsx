@@ -202,7 +202,7 @@ const TransactionModal = ({ labels = [], initialData = null, onClose, onSubmit }
     }
   };
 
-  const isEditMode = !!initialData;
+  const isEditMode = initialData && (initialData._id || initialData.id);
 
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">

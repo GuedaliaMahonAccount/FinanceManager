@@ -100,7 +100,6 @@ const Project = ({ projectId, onNavigate }) => {
         const newNotifications = [];
         const now = new Date();
         const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
 
         subscriptions.forEach(sub => {
             const startDate = new Date(sub.startDate);
@@ -116,28 +115,42 @@ const Project = ({ projectId, onNavigate }) => {
 
                 // We only care about "recent" missing payments (e.g., this year) to avoid spam
                 if (checkYear === currentYear) {
-                    // Check if there is a transaction for this subscription around this date
-                    const hasPayment = transactions.some(t => {
-                        if (t.subscriptionId === (sub._id || sub.id)) {
-                            const tDate = new Date(t.date);
-                            // Match if same month and year (for monthly) or same year (for yearly)
-                            if (sub.frequencyUnit === 'months') {
-                                return tDate.getMonth() === checkMonth && tDate.getFullYear() === checkYear;
-                            } else if (sub.frequencyUnit === 'years') {
-                                return tDate.getFullYear() === checkYear;
-                            }
-                            // For days/weeks, tighter check logic might be needed, but simple overlap is okay for now
-                            return Math.abs(tDate - checkDate) < 7 * 24 * 60 * 60 * 1000; // Within a week
+                    // Check if this specific date was skipped
+                    const isSkipped = sub.skippedPayments?.some(skippedDate => {
+                        const sDate = new Date(skippedDate);
+                        // Compare broadly based on frequency to avoid small time diffs
+                        if (sub.frequencyUnit === 'months') {
+                            return sDate.getMonth() === checkMonth && sDate.getFullYear() === checkYear;
+                        } else if (sub.frequencyUnit === 'years') {
+                            return sDate.getFullYear() === checkYear;
                         }
-                        return false;
+                        return Math.abs(sDate - checkDate) < 24 * 60 * 60 * 1000; // Same day
                     });
 
-                    if (!hasPayment) {
-                        newNotifications.push({
-                            subscription: sub,
-                            dueDate: new Date(checkDate),
-                            id: `${sub._id}-${checkDate.getTime()}`
+                    if (!isSkipped) {
+                        // Check if there is a transaction for this subscription around this date
+                        const hasPayment = transactions.some(t => {
+                            if (t.subscriptionId === (sub._id || sub.id)) {
+                                const tDate = new Date(t.date);
+                                // Match if same month and year (for monthly) or same year (for yearly)
+                                if (sub.frequencyUnit === 'months') {
+                                    return tDate.getMonth() === checkMonth && tDate.getFullYear() === checkYear;
+                                } else if (sub.frequencyUnit === 'years') {
+                                    return tDate.getFullYear() === checkYear;
+                                }
+                                // For days/weeks, tighter check logic
+                                return Math.abs(tDate - checkDate) < 7 * 24 * 60 * 60 * 1000; // Within a week
+                            }
+                            return false;
                         });
+
+                        if (!hasPayment) {
+                            newNotifications.push({
+                                subscription: sub,
+                                dueDate: new Date(checkDate),
+                                id: `${sub._id}-${checkDate.getTime()}`
+                            });
+                        }
                     }
                 }
 
@@ -153,13 +166,25 @@ const Project = ({ projectId, onNavigate }) => {
         setNotifications(newNotifications.sort((a, b) => b.dueDate - a.dueDate));
     };
 
+    const handleSkipNotification = async (notification) => {
+        if (!confirm(`האם לדלג על התשלום עבור ${notification.subscription.name} לתאריך ${notification.dueDate.toLocaleDateString('he-IL')}?`)) return;
+
+        try {
+            await subscriptionsAPI.skipPayment(notification.subscription._id || notification.subscription.id, notification.dueDate);
+            loadData(); // Reload to refresh subscriptions and notifications
+        } catch (error) {
+            console.error('Error skipping payment:', error);
+            alert('שגיאה בדילוג על התשלום: ' + error.message);
+        }
+    };
+
     const handlePayNotification = (notification) => {
         const { subscription, dueDate } = notification;
 
         setEditingTransaction({
             projectId,
             name: subscription.name,
-            description: `תשלום עבור לתקופת ${dueDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })}`,
+            description: `תשלום מנוי עבור ${dueDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' })} (${dueDate.toLocaleDateString('he-IL')})`,
             amount: subscription.amount,
             currency: subscription.currency,
             date: dueDate.toISOString().split('T')[0],
@@ -200,7 +225,10 @@ const Project = ({ projectId, onNavigate }) => {
 
     const handleSaveTransaction = async (transactionData) => {
         try {
-            if (editingTransaction) {
+            // Check if it's an existing transaction (has an ID)
+            const isExistingTransaction = editingTransaction && (editingTransaction._id || editingTransaction.id);
+
+            if (isExistingTransaction) {
                 // Update existing
                 await transactionsAPI.update(editingTransaction._id || editingTransaction.id, {
                     ...transactionData,
@@ -208,10 +236,17 @@ const Project = ({ projectId, onNavigate }) => {
                 });
             } else {
                 // Create new
-                await transactionsAPI.create({
+                const newTransaction = {
                     ...transactionData,
                     projectId
-                });
+                };
+
+                // If coming from subscription notification, preserve the subscriptionId
+                if (editingTransaction && editingTransaction.subscriptionId) {
+                    newTransaction.subscriptionId = editingTransaction.subscriptionId;
+                }
+
+                await transactionsAPI.create(newTransaction);
             }
             setShowTransactionModal(false);
             setEditingTransaction(null);
@@ -483,12 +518,21 @@ const Project = ({ projectId, onNavigate }) => {
                                     <div>
                                         <strong>{notif.subscription.name}</strong> - {notif.dueDate.toLocaleDateString('he-IL')}
                                     </div>
-                                    <button
-                                        className="btn btn-sm btn-primary"
-                                        onClick={() => handlePayNotification(notif)}
-                                    >
-                                        שילמתי / הוסף חשבונית
-                                    </button>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                            className="btn btn-sm btn-primary"
+                                            onClick={() => handlePayNotification(notif)}
+                                        >
+                                            💰 שלם
+                                        </button>
+                                        <button
+                                            className="btn btn-sm btn-secondary"
+                                            onClick={() => handleSkipNotification(notif)}
+                                            style={{ background: '#e2e8f0', color: '#475569' }}
+                                        >
+                                            ⏭️ דלג
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>

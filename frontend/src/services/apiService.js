@@ -160,5 +160,10 @@ export const subscriptionsAPI = {
 
     delete: (id) => apiCall(`/subscriptions/${id}`, {
         method: 'DELETE'
+    }),
+
+    skipPayment: (id, date) => apiCall(`/subscriptions/${id}/skip`, {
+        method: 'POST',
+        body: JSON.stringify({ date })
     })
 };

@@ -46,6 +46,9 @@ const subscriptionSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    skippedPayments: [{
+        type: Date
+    }],
     createdAt: {
         type: Date,
         default: Date.now

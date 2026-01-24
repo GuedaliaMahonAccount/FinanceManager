@@ -57,6 +57,30 @@ export const updateSubscription = async (req, res) => {
     }
 };
 
+// Skip a specific payment
+export const skipPayment = async (req, res) => {
+    try {
+        const { date } = req.body;
+        if (!date) {
+            return res.status(400).json({ message: 'תאריך נדרש' });
+        }
+
+        const subscription = await Subscription.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id },
+            { $addToSet: { skippedPayments: new Date(date) } },
+            { new: true }
+        );
+
+        if (!subscription) {
+            return res.status(404).json({ message: 'המנוי לא נמצא' });
+        }
+
+        res.json(subscription);
+    } catch (error) {
+        res.status(500).json({ message: 'שגיאה בביצוע הפעולה', error: error.message });
+    }
+};
+
 // Delete subscription
 export const deleteSubscription = async (req, res) => {
     try {
