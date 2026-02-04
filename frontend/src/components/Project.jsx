@@ -4,9 +4,11 @@ import { convertCurrency, formatCurrency } from '../services/currencyService';
 import { downloadFile, getFileIcon } from '../services/storageService';
 import TransactionModal from './TransactionModal';
 import SubscriptionModal from './SubscriptionModal';
+import MoveTransactionModal from './MoveTransactionModal';
 
 const Project = ({ projectId, onNavigate }) => {
     const [project, setProject] = useState(null);
+    const [projects, setProjects] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [subscriptions, setSubscriptions] = useState([]);
     const [filteredTransactions, setFilteredTransactions] = useState([]);
@@ -27,6 +29,8 @@ const Project = ({ projectId, onNavigate }) => {
     const [editingTransaction, setEditingTransaction] = useState(null);
     const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
     const [editingSubscription, setEditingSubscription] = useState(null);
+    const [showMoveModal, setShowMoveModal] = useState(false);
+    const [movingTransaction, setMovingTransaction] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -46,15 +50,17 @@ const Project = ({ projectId, onNavigate }) => {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [projectData, transactionsData, labelsData, settingsData, subscriptionsData] = await Promise.all([
+            const [projectData, transactionsData, labelsData, settingsData, subscriptionsData, allProjects] = await Promise.all([
                 projectsAPI.getById(projectId),
                 transactionsAPI.getByProject(projectId),
                 labelsAPI.getAll(),
                 settingsAPI.getAll(),
-                subscriptionsAPI.getByProject(projectId)
+                subscriptionsAPI.getByProject(projectId),
+                projectsAPI.getAll()
             ]);
 
             setProject(projectData);
+            setProjects(allProjects);
             const sortedTransactions = transactionsData.sort((a, b) => new Date(b.date) - new Date(a.date));
             setTransactions(sortedTransactions);
             setSubscriptions(subscriptionsData || []);
@@ -322,6 +328,28 @@ const Project = ({ projectId, onNavigate }) => {
     const handleSubscriptionModalClose = () => {
         setShowSubscriptionModal(false);
         setEditingSubscription(null);
+    };
+
+    const handleMoveTransaction = async (targetProjectId) => {
+        try {
+            await transactionsAPI.move(movingTransaction._id || movingTransaction.id, targetProjectId);
+            setShowMoveModal(false);
+            setMovingTransaction(null);
+            loadData(); // Reload to refresh the transaction list
+        } catch (error) {
+            console.error('Error moving transaction:', error);
+            throw error; // Re-throw to let the modal handle the error display
+        }
+    };
+
+    const handleMoveClick = (transaction) => {
+        setMovingTransaction(transaction);
+        setShowMoveModal(true);
+    };
+
+    const handleMoveModalClose = () => {
+        setShowMoveModal(false);
+        setMovingTransaction(null);
     };
 
     const years = [...new Set(transactions.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a);
@@ -604,6 +632,7 @@ const Project = ({ projectId, onNavigate }) => {
                                         displayCurrency={displayCurrency}
                                         onDelete={handleDeleteTransaction}
                                         onEdit={handleEditClick}
+                                        onMove={handleMoveClick}
                                     />
                                 </React.Fragment>
                             );
@@ -631,11 +660,22 @@ const Project = ({ projectId, onNavigate }) => {
                     onSuccess={handleSaveSubscription}
                 />
             )}
+
+            {/* Move Transaction Modal */}
+            {showMoveModal && movingTransaction && (
+                <MoveTransactionModal
+                    transaction={movingTransaction}
+                    projects={projects}
+                    currentProjectId={projectId}
+                    onClose={handleMoveModalClose}
+                    onMove={handleMoveTransaction}
+                />
+            )}
         </div>
     );
 };
 
-const TransactionItem = ({ transaction, labels, displayCurrency, onDelete, onEdit }) => {
+const TransactionItem = ({ transaction, labels, displayCurrency, onDelete, onEdit, onMove }) => {
     const [convertedAmount, setConvertedAmount] = useState(transaction.amount);
     const [showDetails, setShowDetails] = useState(false);
     const label = labels.find(l => (l._id || l.id) === (transaction.labelId || transaction.label));
@@ -755,6 +795,14 @@ const TransactionItem = ({ transaction, labels, displayCurrency, onDelete, onEdi
                         style={{ color: 'var(--color-primary)' }}
                     >
                         ✏️
+                    </button>
+                    <button
+                        className="btn-icon"
+                        onClick={() => onMove(transaction)}
+                        title="העבר לפרויקט אחר"
+                        style={{ color: 'var(--color-warning)' }}
+                    >
+                        🔄
                     </button>
                     <button
                         className="btn-icon"

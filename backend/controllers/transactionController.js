@@ -158,3 +158,30 @@ export const getProjectStats = async (req, res) => {
         res.status(500).json({ message: 'שגיאה בחישוב הסטטיסטיקות', error: error.message });
     }
 };
+
+// Move transaction to another project
+export const moveTransaction = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { targetProjectId } = req.body;
+
+        if (!targetProjectId) {
+            return res.status(400).json({ message: 'חסר מזהה פרויקט יעד' });
+        }
+
+        const transaction = await Transaction.findOneAndUpdate(
+            { _id: id, user: req.user.id },
+            { projectId: targetProjectId },
+            { new: true, runValidators: true }
+        ).populate('labelId');
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'התנועה לא נמצאה' });
+        }
+
+        res.json(transaction);
+    } catch (error) {
+        console.error('Error moving transaction:', error);
+        res.status(500).json({ message: 'שגיאה בהעברת התנועה', error: error.message });
+    }
+};

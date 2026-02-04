@@ -98,6 +98,11 @@ export const transactionsAPI = {
         body: JSON.stringify(transaction)
     }),
 
+    move: (id, targetProjectId) => apiCall(`/transactions/${id}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ targetProjectId })
+    }),
+
     delete: (id) => apiCall(`/transactions/${id}`, {
         method: 'DELETE'
     })

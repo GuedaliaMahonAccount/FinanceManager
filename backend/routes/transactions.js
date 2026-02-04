@@ -6,7 +6,8 @@ import {
     createTransaction,
     updateTransaction,
     deleteTransaction,
-    getProjectStats
+    getProjectStats,
+    moveTransaction
 } from '../controllers/transactionController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -20,6 +21,8 @@ router.get('/stats/:projectId', getProjectStats);
 router.get('/:id', getTransaction);
 router.post('/', createTransaction);
 router.put('/:id', updateTransaction);
+router.put('/:id/move', moveTransaction);
 router.delete('/:id', deleteTransaction);
 
 export default router;
+
